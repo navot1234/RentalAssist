@@ -698,86 +698,24 @@ def scrape_authenticated_group(
                     )
                     raise  # Re-raise to maintain original behavior
 
-                # Modified overlay handling with more robust selectors and checks
-                overlay_container_selectors = [
-                    "//div[@data-testid='dialog']",
-                    "//div[contains(@role, 'dialog') and contains(@aria-hidden, 'false')]",
-                    "//div[contains(@aria-label, 'Save your login info') and @role='dialog']",
-                    "//div[contains(@aria-label, 'Turn on notifications') and @role='dialog']",
-                    "//div[@aria-label='View site information' and @role='dialog']",
-                    "//div[@role='presentation' and contains(@class, 'overlay')]",
-                ]
-                for overlay_selector_xpath in overlay_container_selectors:
-                    try:
-                        dismiss_button_xpaths = [
-                            ".//button[text()='Not Now']",
-                            ".//button[contains(text(),'Not now')]",
-                            ".//button[contains(text(),'Not Now')]",
-                            ".//a[@aria-label='Close']",
-                            ".//button[@aria-label='Close']",
-                            ".//button[contains(@aria-label, 'close')]",
-                            ".//div[@role='button'][@aria-label='Close']",
-                            ".//button[contains(text(), 'Close')]",
-                            ".//button[contains(text(), 'Dismiss')]",
-                            ".//button[contains(text(), 'Later')]",
-                            ".//div[@role='button'][contains(text(), 'Not Now')]",
-                            ".//div[@role='button'][contains(text(), 'Later')]",
-                            ".//div[@aria-label='Close' and @role='button']",
-                            ".//i[@aria-label='Close dialog']",
-                        ]
-
-                        potential_overlays = driver.find_elements(By.XPATH, overlay_selector_xpath)
-
-                        for overlay_candidate in potential_overlays:
-                            if overlay_candidate.is_displayed():
-                                logging.debug(
-                                    f"Visible overlay detected with selector: {overlay_selector_xpath}. Attempting to dismiss."
-                                )
-                                dismissed_this_one = False
-                                for btn_xpath in dismiss_button_xpaths:
-                                    try:
-                                        dismiss_button = WebDriverWait(overlay_candidate, 1).until(
-                                            EC.element_to_be_clickable((By.XPATH, btn_xpath))
-                                        )
-                                        if (
-                                            dismiss_button.is_displayed()
-                                            and dismiss_button.is_enabled()
-                                        ):
-                                            driver.execute_script(
-                                                "arguments[0].click();", dismiss_button
-                                            )
-                                            logging.debug(
-                                                f"Clicked dismiss button ('{btn_xpath}') in overlay {overlay_selector_xpath}."
-                                            )
-                                            WebDriverWait(driver, 5).until(
-                                                EC.invisibility_of_element(overlay_candidate)
-                                            )
-                                            logging.debug(
-                                                f"Overlay {overlay_selector_xpath} confirmed dismissed."
-                                            )
-                                            dismissed_this_one = True
-                                            break
-                                    except (TimeoutException, NoSuchElementException):
-                                        logging.debug(
-                                            f"Dismiss button '{btn_xpath}' not found or not clickable in overlay {overlay_selector_xpath}."
-                                        )
-                                    except StaleElementReferenceException:
-                                        logging.info(
-                                            f"Overlay or button became stale during dismissal attempt for {overlay_selector_xpath}, likely dismissed."
-                                        )
-                                        dismissed_this_one = True
-                                        break
-                                    except Exception as e_dismiss:
-                                        logging.error(
-                                            f"Error clicking dismiss button '{btn_xpath}' in overlay {overlay_selector_xpath}: {e_dismiss}"
-                                        )
-                                if dismissed_this_one:
-                                    break
-
-                    except Exception as e_overlay_check:
-                        logging.debug(
-                            f"Error checking/processing overlay selector {overlay_selector_xpath}: {e_overlay_check}"
-                        )
+                # Dismiss any leftover dialog with a single fast JS call.
+                # (Popups are already suppressed via Chrome prefs; this is a last-resort catch.)
+                try:
+                    driver.execute_script("""
+                        var btns = document.querySelectorAll(
+                            '[role="dialog"] [role="button"][aria-label="Close"], ' +
+                            '[role="dialog"] button'
+                        );
+                        for (var i = 0; i < btns.length; i++) {
+                            var t = btns[i].textContent.trim();
+                            if (['Not Now','Close','Later','Dismiss'].indexOf(t) !== -1 ||
+                                btns[i].getAttribute('aria-label') === 'Close') {
+                                btns[i].click(); break;
+                            }
+                        }
+                    """)
+                except Exception:
+                    pass
 
                 current_post_elements = driver.find_elements(
                     POST_CONTAINER_S[0], POST_CONTAINER_S[1]
@@ -829,7 +767,6 @@ def scrape_authenticated_group(
                             "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
                             post_element,
                         )
-                        time.sleep(0.3)
 
                         see_more_button = driver.execute_script(
                             """
