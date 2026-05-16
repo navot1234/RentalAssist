@@ -376,7 +376,7 @@ def _extract_data_from_post_html(
                 for btn in text_container.find_all(attrs={"role": "button"}):
                     if btn.get_text(strip=True) in ("See more", "Show more"):
                         btn.decompose()
-                text_content = text_container.get_text(separator="\n", strip=True)
+                text_content = text_container.get_text(separator=" ", strip=True)
 
             if not text_content or text_content == "N/A":
                 generic_text_div = soup.select_one(GENERIC_TEXT_DIV_BS)
@@ -849,7 +849,7 @@ def scrape_authenticated_group(
 
                         if see_more_button:
                             driver.execute_script("arguments[0].click();", see_more_button)
-                            time.sleep(0.8)
+                            time.sleep(0.5)
                             logging.info(
                                 f"Clicked 'See more' for post {temp_post_id or temp_post_url}"
                             )

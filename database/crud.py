@@ -387,17 +387,51 @@ def get_all_categorized_posts(
         return []
 
 
-def get_all_posts(db_conn: sqlite3.Connection, group_id: int = None) -> list[dict]:
+def get_all_posts(
+    db_conn: sqlite3.Connection, group_id: int = None, filters: dict = None
+) -> list[dict]:
     """Retrieves all scraped posts regardless of AI processing status."""
-    sql = """
+    if filters is None:
+        filters = {}
+    base_query = """
         SELECT Posts.*,
-            (SELECT COUNT(*) FROM Comments WHERE Comments.internal_post_id = Posts.internal_post_id) as comment_count
+            COUNT(Comments.internal_post_id) as comment_count
         FROM Posts
+        LEFT JOIN Comments ON Posts.internal_post_id = Comments.internal_post_id
     """
+    conditions = []
     params = []
     if group_id is not None:
-        sql += " WHERE Posts.group_id = ?"
+        conditions.append("Posts.group_id = ?")
         params.append(group_id)
+    if filters.get("start_date"):
+        conditions.append("Posts.posted_at >= ?")
+        params.append(filters["start_date"])
+    if filters.get("end_date"):
+        conditions.append("Posts.posted_at <= ?")
+        params.append(filters["end_date"])
+    if filters.get("post_author"):
+        conditions.append("Posts.post_author_name LIKE ?")
+        params.append("%" + filters["post_author"] + "%")
+    if filters.get("keyword"):
+        conditions.append("Posts.post_content_raw LIKE ?")
+        params.append("%" + filters["keyword"] + "%")
+
+    sql = base_query
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " GROUP BY Posts.internal_post_id"
+
+    having_conditions = []
+    if filters.get("min_comments") is not None:
+        having_conditions.append("comment_count >= ?")
+        params.append(filters["min_comments"])
+    if filters.get("max_comments") is not None:
+        having_conditions.append("comment_count <= ?")
+        params.append(filters["max_comments"])
+    if having_conditions:
+        sql += " HAVING " + " AND ".join(having_conditions)
+
     sql += " ORDER BY Posts.posted_at DESC"
 
     try:

@@ -80,11 +80,11 @@ def fetch_data_for_export(
             result["combined"].extend(result["groups"])
 
         if entity in ["posts", "all"]:
-            result["posts"] = crud.get_all_posts(conn)
+            result["posts"] = crud.get_all_posts(conn, filters=filters)
             result["combined"].extend(result["posts"])
 
         if entity in ["comments", "all"]:
-            fetched_posts = crud.get_all_posts(conn)
+            fetched_posts = crud.get_all_posts(conn, filters=filters)
             for post in fetched_posts:
                 comments = crud.get_comments_for_post(conn, post["internal_post_id"])
                 result["comments"].extend(comments)
