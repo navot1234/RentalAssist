@@ -1,2 +1,10 @@
+.venv/
+venv/
+.env
+.pytest_cache
+__pycache__/
+*.pyc
+insights.db
+.vscode
 .DS_Store
 .claude/

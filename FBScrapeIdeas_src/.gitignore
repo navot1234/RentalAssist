@@ -1,9 +1,0 @@
-.venv/
-venv/
-.env
-.pytest_cache
-__pycache__/
-*.pyc
-insights.db
-.vscode
-/tmp/fb_*.png
