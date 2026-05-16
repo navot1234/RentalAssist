@@ -387,6 +387,74 @@ def get_all_categorized_posts(
         return []
 
 
+def get_all_posts(
+    db_conn: sqlite3.Connection, group_id: int = None, filters: dict = None
+) -> list[dict]:
+    """Retrieves all scraped posts regardless of AI processing status."""
+    if filters is None:
+        filters = {}
+    base_query = """
+        SELECT Posts.*,
+            COUNT(Comments.internal_post_id) as comment_count
+        FROM Posts
+        LEFT JOIN Comments ON Posts.internal_post_id = Comments.internal_post_id
+    """
+    conditions = []
+    params = []
+    if group_id is not None:
+        conditions.append("Posts.group_id = ?")
+        params.append(group_id)
+    if filters.get("start_date"):
+        conditions.append("Posts.posted_at >= ?")
+        params.append(filters["start_date"])
+    if filters.get("end_date"):
+        conditions.append("Posts.posted_at <= ?")
+        params.append(filters["end_date"])
+    if filters.get("post_author"):
+        conditions.append("Posts.post_author_name LIKE ?")
+        params.append("%" + filters["post_author"] + "%")
+    if filters.get("keyword"):
+        conditions.append("Posts.post_content_raw LIKE ?")
+        params.append("%" + filters["keyword"] + "%")
+
+    sql = base_query
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " GROUP BY Posts.internal_post_id"
+
+    having_conditions = []
+    if filters.get("min_comments") is not None:
+        having_conditions.append("comment_count >= ?")
+        params.append(filters["min_comments"])
+    if filters.get("max_comments") is not None:
+        having_conditions.append("comment_count <= ?")
+        params.append(filters["max_comments"])
+    if having_conditions:
+        sql += " HAVING " + " AND ".join(having_conditions)
+
+    sql += " ORDER BY Posts.posted_at DESC"
+
+    try:
+        cursor = db_conn.cursor()
+        cursor.execute(sql, params)
+        results = []
+        for row in cursor.fetchall():
+            post_dict = dict(row)
+            if post_dict.get("ai_keywords"):
+                try:
+                    post_dict["ai_keywords"] = json.loads(post_dict["ai_keywords"])
+                except json.JSONDecodeError:
+                    post_dict["ai_keywords"] = []
+            else:
+                post_dict["ai_keywords"] = []
+            post_dict["ai_is_potential_idea"] = bool(post_dict.get("ai_is_potential_idea", 0))
+            results.append(post_dict)
+        return results
+    except sqlite3.Error as e:
+        logging.error(f"Error retrieving all posts: {e}")
+        return []
+
+
 def get_comments_for_post(db_conn: sqlite3.Connection, internal_post_id: int) -> list[dict]:
     """
     Retrieves all comments for a given post.
