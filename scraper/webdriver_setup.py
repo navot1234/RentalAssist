@@ -33,7 +33,7 @@ def init_webdriver(headless: bool = True) -> webdriver.Chrome:
     prefs = {
         "credentials_enable_service": False,
         "profile.password_manager_enabled": False,
-        "profile.default_content_setting_values.notifications": 1,
+        "profile.default_content_setting_values.notifications": 2,
         "profile.default_content_setting_values.automatic_downloads": 1,
     }
 
