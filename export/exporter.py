@@ -80,11 +80,11 @@ def fetch_data_for_export(
             result["combined"].extend(result["groups"])
 
         if entity in ["posts", "all"]:
-            result["posts"] = crud.get_all_categorized_posts(conn, None, filters)
+            result["posts"] = crud.get_all_posts(conn)
             result["combined"].extend(result["posts"])
 
         if entity in ["comments", "all"]:
-            fetched_posts = crud.get_all_categorized_posts(conn, None, filters)
+            fetched_posts = crud.get_all_posts(conn)
             for post in fetched_posts:
                 comments = crud.get_comments_for_post(conn, post["internal_post_id"])
                 result["comments"].extend(comments)
@@ -210,7 +210,7 @@ def write_data_file(
             kwargs["fieldnames"] = fieldnames
 
         open_args = kwargs.pop("open_args", {})
-        with open(abs_path, "w", encoding="utf-8", **open_args) as f:
+        with open(abs_path, "w", encoding="utf-8-sig", **open_args) as f:
             if format_type == "CSV":
                 writer = csv.DictWriter(f, **kwargs)
                 writer.writeheader()
@@ -244,7 +244,10 @@ def export_to_csv(data: dict[str, list[dict]], output_path: str):
         logging.error(f"Failed to create/verify export directory: {e}")
         raise
 
+    active_types = {k for k, v in data.items() if v and k != "combined"}
     for data_type, file_path in paths.items():
+        if data_type == "combined" and len(active_types) <= 1:
+            continue
         write_data_file(
             records=data[data_type],
             file_path=file_path,
@@ -292,7 +295,10 @@ def export_to_json(data: dict[str, list[dict]], output_path: str):
         logging.error(f"Failed to create/verify export directory: {e}")
         raise
 
+    active_types = {k for k, v in data.items() if v and k != "combined"}
     for data_type, file_path in paths.items():
+        if data_type == "combined" and len(active_types) <= 1:
+            continue
         write_data_file(
             records=data[data_type],
             file_path=file_path,

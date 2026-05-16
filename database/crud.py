@@ -387,6 +387,40 @@ def get_all_categorized_posts(
         return []
 
 
+def get_all_posts(db_conn: sqlite3.Connection, group_id: int = None) -> list[dict]:
+    """Retrieves all scraped posts regardless of AI processing status."""
+    sql = """
+        SELECT Posts.*,
+            (SELECT COUNT(*) FROM Comments WHERE Comments.internal_post_id = Posts.internal_post_id) as comment_count
+        FROM Posts
+    """
+    params = []
+    if group_id is not None:
+        sql += " WHERE Posts.group_id = ?"
+        params.append(group_id)
+    sql += " ORDER BY Posts.posted_at DESC"
+
+    try:
+        cursor = db_conn.cursor()
+        cursor.execute(sql, params)
+        results = []
+        for row in cursor.fetchall():
+            post_dict = dict(row)
+            if post_dict.get("ai_keywords"):
+                try:
+                    post_dict["ai_keywords"] = json.loads(post_dict["ai_keywords"])
+                except json.JSONDecodeError:
+                    post_dict["ai_keywords"] = []
+            else:
+                post_dict["ai_keywords"] = []
+            post_dict["ai_is_potential_idea"] = bool(post_dict.get("ai_is_potential_idea", 0))
+            results.append(post_dict)
+        return results
+    except sqlite3.Error as e:
+        logging.error(f"Error retrieving all posts: {e}")
+        return []
+
+
 def get_comments_for_post(db_conn: sqlite3.Connection, internal_post_id: int) -> list[dict]:
     """
     Retrieves all comments for a given post.

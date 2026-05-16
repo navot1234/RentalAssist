@@ -31,8 +31,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logging.getLogger().setLevel(logging.INFO)
 
 POST_CONTAINER_S = (
-    By.CSS_SELECTOR,
-    'div.x1yztbdb.x1n2onr6.xh8yej3.x1ja2u2z, div[role="article"], div[data-ad-preview="message"], div[data-pagelet^="FeedUnit_"]',
+    By.XPATH,
+    '//div[@role="article" and not(ancestor::div[@role="article"])]',
 )
 POST_PERMALINK_XPATH_S = (
     By.XPATH,
@@ -373,16 +373,10 @@ def _extract_data_from_post_html(
             text_content = "N/A"
             text_container = soup.select_one(POST_TEXT_CONTAINER_BS)
             if text_container:
-                parts = []
-                for elem in text_container.find_all(string=False, recursive=False):
-                    if not elem.find(["button", "a"], attrs={"role": "button"}):
-                        elem_text = elem.get_text(separator=" ", strip=True)
-                        if elem_text:
-                            parts.append(elem_text)
-                if parts:
-                    text_content = "\n".join(parts)
-                else:
-                    text_content = text_container.get_text(separator=" ", strip=True)
+                for btn in text_container.find_all(attrs={"role": "button"}):
+                    if btn.get_text(strip=True) in ("See more", "Show more"):
+                        btn.decompose()
+                text_content = text_container.get_text(separator="\n", strip=True)
 
             if not text_content or text_content == "N/A":
                 generic_text_div = soup.select_one(GENERIC_TEXT_DIV_BS)
@@ -831,26 +825,38 @@ def scrape_authenticated_group(
                         continue
 
                     try:
-                        see_more_button = WebDriverWait(post_element, 1).until(
-                            EC.element_to_be_clickable(SEE_MORE_BUTTON_XPATH_S)
-                        )
                         driver.execute_script(
                             "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
-                            see_more_button,
+                            post_element,
                         )
-                        time.sleep(0.2)
-                        see_more_button = WebDriverWait(post_element, 1).until(
-                            EC.element_to_be_clickable(see_more_button)
+                        time.sleep(0.3)
+
+                        see_more_button = driver.execute_script(
+                            """
+                            var post = arguments[0];
+                            var container = post.querySelector(
+                                '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]'
+                            ) || post;
+                            var all = container.querySelectorAll('[role="button"]');
+                            for (var i = 0; i < all.length; i++) {
+                                var t = all[i].textContent.trim();
+                                if (t === 'See more' || t === 'Show more') return all[i];
+                            }
+                            return null;
+                            """,
+                            post_element,
                         )
-                        see_more_button.click()
-                        time.sleep(0.5)
-                        logging.debug(
-                            f"Clicked 'See more' for post {temp_post_id or temp_post_url}"
-                        )
-                    except (TimeoutException, NoSuchElementException):
-                        logging.debug(
-                            f"No 'See more' button or not clickable for post {temp_post_id or temp_post_url}"
-                        )
+
+                        if see_more_button:
+                            driver.execute_script("arguments[0].click();", see_more_button)
+                            time.sleep(0.8)
+                            logging.info(
+                                f"Clicked 'See more' for post {temp_post_id or temp_post_url}"
+                            )
+                        else:
+                            logging.debug(
+                                f"No 'See more' button found for post {temp_post_id or temp_post_url}"
+                            )
                     except Exception as e_sm:
                         logging.warning(
                             f"Error clicking 'See more' for {temp_post_id or temp_post_url}: {e_sm}"
